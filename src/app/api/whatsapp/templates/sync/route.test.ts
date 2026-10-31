@@ -105,6 +105,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
 })
 
 describe('POST /api/whatsapp/templates/sync', () => {
@@ -135,6 +136,25 @@ describe('POST /api/whatsapp/templates/sync', () => {
       user_id: 'syncing-admin',
       name: 'order_update',
     })
+  })
+
+  it('lists templates through Kapso with X-API-Key when META_API_BASE is the proxy', async () => {
+    vi.stubEnv('META_API_BASE', 'https://api.kapso.ai/meta/whatsapp/v24.0/')
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ data: [META_TEMPLATE] }), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await POST()
+    expect(res.status).toBe(200)
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe(
+      'https://api.kapso.ai/meta/whatsapp/v24.0/WABA-1/message_templates?limit=100&fields=id,name,language,status,category,components,quality_score',
+    )
+    const headers = init.headers as Record<string, string>
+    expect(headers['X-API-Key']).toBe('plaintext-token')
+    expect(headers.Authorization).toBeUndefined()
   })
 
   it('still syncs when the account holds duplicate rows for the same name and language', async () => {

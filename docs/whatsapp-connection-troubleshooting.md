@@ -163,11 +163,20 @@ Unknown codes keep Meta's own words plus the trace id:
 > Meta returned an error while registering the phone number (code
 > 12345/6): <Meta's message>. Trace id AbCdEf.
 
-If the server cannot reach `graph.facebook.com` at all:
+If the server cannot reach the WhatsApp API host at all
+(`graph.facebook.com`, or the host in `META_API_BASE` — see
+[Kapso-hosted numbers](./kapso-whatsapp.md)):
 
 > Could not reach the Meta Graph API while reading the phone number:
 > fetch failed. Check that this server has outbound internet access to
-> graph.facebook.com and try again.
+> the WhatsApp API host (graph.facebook.com, or the host in
+> META_API_BASE) and try again.
+
+### Send fails with code 10 / subcode 2593181 on a Kapso-hosted number
+
+The System User token can read the WABA, but Meta rejects sends because
+the number is registered to Kapso's Meta app. Point outbound calls at
+Kapso's proxy — [Kapso-hosted numbers](./kapso-whatsapp.md).
 
 ## Credentials valid, but no messages arrive
 

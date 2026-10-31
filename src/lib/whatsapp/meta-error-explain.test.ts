@@ -193,6 +193,7 @@ describe("explainMetaError — fallbacks", () => {
     expect(x.fbtraceId).toBeNull();
     expect(x.summary).toMatch(/Could not reach the Meta Graph API/);
     expect(x.summary).toMatch(/fetch failed/);
+    expect(x.summary).toMatch(/META_API_BASE/);
   });
 
   it("handles a non-Error throw", () => {
