@@ -7,15 +7,16 @@
  * (e.g. `(accessToken, phoneNumberId)` vs `(phoneNumberId, accessToken)`).
  * With named params, a typo surfaces immediately as a TypeScript error
  * instead of a runtime rejection from Meta.
+ *
+ * The base URL and auth header come from `meta-transport.ts` (Graph
+ * Bearer by default, Kapso `X-API-Key` when META_API_BASE points there).
  */
 
 import { isBusinessScopedUserId } from './wa-identity'
+import { getMetaApiBase, metaAuthHeaders, resolveMetaAuthMode } from './meta-transport'
 import { getT } from '@/lib/i18n/translate'
 
 const ti = getT('Validation.interactive')
-
-const META_API_VERSION = 'v21.0'
-const META_API_BASE = `https://graph.facebook.com/${META_API_VERSION}`
 
 export interface MetaSendResult {
   messageId: string
@@ -133,9 +134,9 @@ export async function verifyPhoneNumber(
   args: VerifyPhoneNumberArgs
 ): Promise<MetaPhoneInfo> {
   const { phoneNumberId, accessToken } = args
-  const url = `${META_API_BASE}/${phoneNumberId}?fields=id,display_phone_number,verified_name,quality_rating`
+  const url = `${getMetaApiBase()}/${phoneNumberId}?fields=id,display_phone_number,verified_name,quality_rating`
   const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: { ...metaAuthHeaders(accessToken) },
   })
   if (!response.ok) {
     await throwMetaError(response, `Meta API error: ${response.status}`)
@@ -147,10 +148,10 @@ export async function getPhoneNumberHealth(
   args: VerifyPhoneNumberArgs
 ): Promise<MetaPhoneHealth> {
   const { phoneNumberId, accessToken } = args
-  const headers = { Authorization: `Bearer ${accessToken}` }
+  const headers = { ...metaAuthHeaders(accessToken) }
   const [response, limitResponse] = await Promise.all([
-    fetch(`${META_API_BASE}/${phoneNumberId}?fields=id,display_phone_number,quality_rating`, { headers }),
-    fetch(`${META_API_BASE}/${phoneNumberId}?fields=whatsapp_business_manager_messaging_limit`, { headers }).catch(
+    fetch(`${getMetaApiBase()}/${phoneNumberId}?fields=id,display_phone_number,quality_rating`, { headers }),
+    fetch(`${getMetaApiBase()}/${phoneNumberId}?fields=whatsapp_business_manager_messaging_limit`, { headers }).catch(
       () => null
     ),
   ])
@@ -229,12 +230,12 @@ export async function registerPhoneNumber(
   args: RegisterPhoneNumberArgs
 ): Promise<RegisterPhoneNumberResult> {
   const { phoneNumberId, accessToken, pin } = args
-  const url = `${META_API_BASE}/${phoneNumberId}/register`
+  const url = `${getMetaApiBase()}/${phoneNumberId}/register`
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
+      ...metaAuthHeaders(accessToken),
     },
     body: JSON.stringify({ messaging_product: 'whatsapp', pin }),
   })
@@ -267,10 +268,10 @@ export async function subscribeWabaToApp(
   args: SubscribeWabaToAppArgs
 ): Promise<void> {
   const { wabaId, accessToken } = args
-  const url = `${META_API_BASE}/${wabaId}/subscribed_apps`
+  const url = `${getMetaApiBase()}/${wabaId}/subscribed_apps`
   const response = await fetch(url, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: { ...metaAuthHeaders(accessToken) },
   })
   if (!response.ok) {
     await throwMetaError(response, `Meta API error: ${response.status}`)
@@ -304,10 +305,10 @@ export async function listWabaPhoneNumbers(
   const { wabaId, accessToken } = args
   const out: WabaPhoneNumber[] = []
   let url: string | undefined =
-    `${META_API_BASE}/${wabaId}/phone_numbers?fields=id,display_phone_number,verified_name&limit=100`
+    `${getMetaApiBase()}/${wabaId}/phone_numbers?fields=id,display_phone_number,verified_name&limit=100`
   for (let page = 0; url && page < 5; page++) {
     const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { ...metaAuthHeaders(accessToken) },
     })
     if (!response.ok) {
       await throwMetaError(response, `Meta API error: ${response.status}`)
@@ -344,9 +345,9 @@ export async function getSubscribedApps(
   args: GetSubscribedAppsArgs
 ): Promise<SubscribedApp[]> {
   const { wabaId, accessToken } = args
-  const url = `${META_API_BASE}/${wabaId}/subscribed_apps`
+  const url = `${getMetaApiBase()}/${wabaId}/subscribed_apps`
   const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: { ...metaAuthHeaders(accessToken) },
   })
   if (!response.ok) {
     await throwMetaError(response, `Meta API error: ${response.status}`)
@@ -395,7 +396,7 @@ export async function sendTextMessage(
   args: SendTextMessageArgs
 ): Promise<MetaSendResult> {
   const { phoneNumberId, accessToken, to, text, contextMessageId } = args
-  const url = `${META_API_BASE}/${phoneNumberId}/messages`
+  const url = `${getMetaApiBase()}/${phoneNumberId}/messages`
   const body: Record<string, unknown> = {
     messaging_product: 'whatsapp',
     ...recipientFields(to),
@@ -409,7 +410,7 @@ export async function sendTextMessage(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
+      ...metaAuthHeaders(accessToken),
     },
     body: JSON.stringify(body),
   })
@@ -453,7 +454,7 @@ export async function sendMediaMessage(
 ): Promise<MetaSendResult> {
   const { phoneNumberId, accessToken, to, kind, link, caption, filename, contextMessageId } = args
   if (!link) throw new Error('sendMediaMessage requires a link.')
-  const url = `${META_API_BASE}/${phoneNumberId}/messages`
+  const url = `${getMetaApiBase()}/${phoneNumberId}/messages`
 
   // Audio accepts neither caption nor filename per Meta's spec — adding
   // either yields a 400. image/video/document accept a caption; only
@@ -474,7 +475,7 @@ export async function sendMediaMessage(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
+      ...metaAuthHeaders(accessToken),
     },
     body: JSON.stringify(body),
   })
@@ -547,7 +548,7 @@ export async function sendTemplateMessage(
     messageParams,
     contextMessageId,
   } = args
-  const url = `${META_API_BASE}/${phoneNumberId}/messages`
+  const url = `${getMetaApiBase()}/${phoneNumberId}/messages`
 
   const templatePayload: Record<string, unknown> = {
     name: templateName,
@@ -591,7 +592,7 @@ export async function sendTemplateMessage(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
+      ...metaAuthHeaders(accessToken),
     },
     body: JSON.stringify(body),
   })
@@ -617,6 +618,9 @@ export async function sendTemplateMessage(
 //   2. POST /{id}  (Authorization: OAuth <token>, file_offset: 0, raw bytes)
 //        → { h: "<handle>" }
 //
+// Direct Meta only. Api-key mode (Kapso) authenticates both steps with
+// X-API-Key and does not put the key in the query string.
+//
 // See https://developers.facebook.com/docs/graph-api/guides/upload
 
 export interface UploadResumableMediaArgs {
@@ -638,16 +642,21 @@ export async function uploadResumableMedia(
 ): Promise<{ handle: string }> {
   const { appId, accessToken, fileName, mimeType, bytes } = args
 
-  // Step 1 — open an upload session.
+  // Step 1 — open an upload session. Direct Meta takes the token as a
+  // query param; Kapso takes X-API-Key and must not see the key in the URL.
+  const apiKeyMode = resolveMetaAuthMode() === 'api-key'
   const startParams = new URLSearchParams({
     file_name: fileName,
     file_length: String(bytes.byteLength),
     file_type: mimeType,
-    access_token: accessToken,
   })
+  if (!apiKeyMode) startParams.set('access_token', accessToken)
   const startRes = await fetch(
-    `${META_API_BASE}/${appId}/uploads?${startParams.toString()}`,
-    { method: 'POST' },
+    `${getMetaApiBase()}/${appId}/uploads?${startParams.toString()}`,
+    {
+      method: 'POST',
+      ...(apiKeyMode ? { headers: metaAuthHeaders(accessToken) } : {}),
+    },
   )
   if (!startRes.ok) {
     await throwMetaError(startRes, `Resumable upload start failed: ${startRes.status}`)
@@ -657,12 +666,12 @@ export async function uploadResumableMedia(
     throw new Error('Resumable upload did not return a session id.')
   }
 
-  // Step 2 — upload the bytes. Note the `OAuth` auth scheme (not Bearer)
-  // and the file_offset header, both required by this endpoint.
-  const uploadRes = await fetch(`${META_API_BASE}/${startData.id}`, {
+  // Step 2 — upload the bytes. Direct Meta requires the `OAuth` scheme
+  // (not Bearer) and the file_offset header. Api-key mode sends X-API-Key.
+  const uploadRes = await fetch(`${getMetaApiBase()}/${startData.id}`, {
     method: 'POST',
     headers: {
-      Authorization: `OAuth ${accessToken}`,
+      ...metaAuthHeaders(accessToken, 'oauth'),
       file_offset: '0',
     },
     // Uint8Array is a valid BodyInit at runtime; cast around the
@@ -714,12 +723,12 @@ export async function submitMessageTemplate(
   args: SubmitMessageTemplateArgs
 ): Promise<SubmitMessageTemplateResult> {
   const { wabaId, accessToken, payload } = args
-  const url = `${META_API_BASE}/${wabaId}/message_templates`
+  const url = `${getMetaApiBase()}/${wabaId}/message_templates`
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
+      ...metaAuthHeaders(accessToken),
     },
     body: JSON.stringify(payload),
   })
@@ -767,11 +776,11 @@ export async function editMessageTemplate(
   const { metaTemplateId, accessToken, components, category } = args
   const body: Record<string, unknown> = { components }
   if (category) body.category = category
-  const response = await fetch(`${META_API_BASE}/${metaTemplateId}`, {
+  const response = await fetch(`${getMetaApiBase()}/${metaTemplateId}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
+      ...metaAuthHeaders(accessToken),
     },
     body: JSON.stringify(body),
   })
@@ -805,10 +814,10 @@ export async function deleteMessageTemplate(
   const { wabaId, accessToken, name, metaTemplateId } = args
   const params = new URLSearchParams({ name })
   if (metaTemplateId) params.set('hsm_id', metaTemplateId)
-  const url = `${META_API_BASE}/${wabaId}/message_templates?${params.toString()}`
+  const url = `${getMetaApiBase()}/${wabaId}/message_templates?${params.toString()}`
   const response = await fetch(url, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: { ...metaAuthHeaders(accessToken) },
   })
   // Treat a 404 as a no-op — the template is already gone on Meta's
   // side, and we still want the local row removed.
@@ -840,12 +849,12 @@ export async function sendReactionMessage(
   args: SendReactionMessageArgs
 ): Promise<MetaSendResult> {
   const { phoneNumberId, accessToken, to, targetMessageId, emoji } = args
-  const url = `${META_API_BASE}/${phoneNumberId}/messages`
+  const url = `${getMetaApiBase()}/${phoneNumberId}/messages`
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
+      ...metaAuthHeaders(accessToken),
     },
     body: JSON.stringify({
       messaging_product: 'whatsapp',
@@ -891,12 +900,12 @@ export async function sendTypingIndicator(
   args: SendTypingIndicatorArgs
 ): Promise<void> {
   const { phoneNumberId, accessToken, messageId } = args
-  const url = `${META_API_BASE}/${phoneNumberId}/messages`
+  const url = `${getMetaApiBase()}/${phoneNumberId}/messages`
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
+      ...metaAuthHeaders(accessToken),
     },
     body: JSON.stringify({
       messaging_product: 'whatsapp',
@@ -1023,12 +1032,12 @@ export async function sendInteractiveButtons(
   }
   if (contextMessageId) body.context = { message_id: contextMessageId }
 
-  const url = `${META_API_BASE}/${phoneNumberId}/messages`
+  const url = `${getMetaApiBase()}/${phoneNumberId}/messages`
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
+      ...metaAuthHeaders(accessToken),
     },
     body: JSON.stringify(body),
   })
@@ -1154,12 +1163,12 @@ export async function sendInteractiveList(
   }
   if (contextMessageId) body.context = { message_id: contextMessageId }
 
-  const url = `${META_API_BASE}/${phoneNumberId}/messages`
+  const url = `${getMetaApiBase()}/${phoneNumberId}/messages`
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
+      ...metaAuthHeaders(accessToken),
     },
     body: JSON.stringify(body),
   })
@@ -1218,8 +1227,8 @@ export async function getMediaUrl(
   args: GetMediaUrlArgs
 ): Promise<{ url: string; mimeType: string; fileSize: number | null }> {
   const { mediaId, accessToken } = args
-  const response = await fetch(`${META_API_BASE}/${mediaId}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+  const response = await fetch(`${getMetaApiBase()}/${mediaId}`, {
+    headers: { ...metaAuthHeaders(accessToken) },
   })
   if (!response.ok) {
     await throwMetaError(response, `Media fetch failed: ${response.status}`)
@@ -1250,7 +1259,7 @@ export async function downloadMedia(
 ): Promise<{ buffer: Buffer; contentType: string }> {
   const { downloadUrl, accessToken } = args
   const response = await fetch(downloadUrl, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: { ...metaAuthHeaders(accessToken) },
   })
   if (!response.ok) {
     throw new Error(`Media download failed: ${response.status}`)

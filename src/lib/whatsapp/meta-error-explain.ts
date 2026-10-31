@@ -122,7 +122,8 @@ export function explainMetaError(
     return {
       summary:
         `Could not reach the Meta Graph API while ${STEP_LABEL[step]}: ${message}. ` +
-        'Check that this server has outbound internet access to graph.facebook.com and try again.',
+        'Check that this server has outbound internet access to the WhatsApp API host ' +
+        '(graph.facebook.com, or the host in META_API_BASE) and try again.',
       field: null,
       side: 'meta',
       httpStatus: 502,

@@ -6,6 +6,7 @@ import {
   toErrorResponse,
 } from '@/lib/auth/account'
 import { decrypt } from '@/lib/whatsapp/encryption'
+import { getMetaApiBase, metaAuthHeaders } from '@/lib/whatsapp/meta-transport'
 import { normalizeStatus } from '@/lib/whatsapp/template-status-normalize'
 import type { TemplateButton, TemplateSampleValues } from '@/types'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
@@ -25,9 +26,6 @@ const t = getT('Api')
  * Locally-created templates (no Meta counterpart) are NOT deleted —
  * they remain visible so the user can notice drift and clean up.
  */
-
-const META_API_VERSION = 'v21.0'
-const META_API_BASE = `https://graph.facebook.com/${META_API_VERSION}`
 
 interface MetaButton {
   type: string
@@ -173,14 +171,14 @@ export async function POST() {
     const metaTemplates: MetaTemplate[] = []
     let nextUrl:
       | string
-      | null = `${META_API_BASE}/${config.waba_id}/message_templates?limit=100&fields=id,name,language,status,category,components,quality_score`
+      | null = `${getMetaApiBase()}/${config.waba_id}/message_templates?limit=100&fields=id,name,language,status,category,components,quality_score`
     const PAGE_CAP = 20
     let pageCount = 0
 
     while (nextUrl && pageCount < PAGE_CAP) {
       pageCount++
       const metaRes: Response = await fetch(nextUrl, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: metaAuthHeaders(accessToken),
       })
 
       if (!metaRes.ok) {
