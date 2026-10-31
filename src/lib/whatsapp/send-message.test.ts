@@ -530,3 +530,45 @@ describe('sendMessageToConversation — statuses that beat the insert', () => {
     );
   });
 });
+
+// ============================================================
+// Upstream rejection status — never 502 (Cloudflare masks 502 bodies)
+// ============================================================
+
+describe('sendMessageToConversation — upstream rejection status', () => {
+  it('maps a 4xx Meta/Kapso rejection to 422 with the reason', async () => {
+    const { sendTextMessage, MetaApiError } = await import('@/lib/whatsapp/meta-api');
+    vi.mocked(sendTextMessage).mockRejectedValueOnce(
+      new MetaApiError('Cannot send non-template messages outside the 24-hour window.', {
+        httpStatus: 422,
+      })
+    );
+
+    await expect(
+      sendMessageToConversation(
+        sendPathDb([], {}, { id: 'ct-1', phone: '+15551234567', wa_user_id: null }),
+        'acct-1',
+        { conversationId: 'cv-1', messageType: 'text', contentText: 'hi' }
+      )
+    ).rejects.toMatchObject({
+      code: 'meta_error',
+      status: 422,
+      message: expect.stringContaining('24-hour window'),
+    });
+  });
+
+  it('maps an upstream 5xx to 503', async () => {
+    const { sendTextMessage, MetaApiError } = await import('@/lib/whatsapp/meta-api');
+    vi.mocked(sendTextMessage).mockRejectedValueOnce(
+      new MetaApiError('upstream down', { httpStatus: 500 })
+    );
+
+    await expect(
+      sendMessageToConversation(
+        sendPathDb([], {}, { id: 'ct-1', phone: '+15551234567', wa_user_id: null }),
+        'acct-1',
+        { conversationId: 'cv-1', messageType: 'text', contentText: 'hi' }
+      )
+    ).rejects.toMatchObject({ code: 'meta_error', status: 503 });
+  });
+});

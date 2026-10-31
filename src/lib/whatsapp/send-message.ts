@@ -443,7 +443,20 @@ export async function sendMessageToConversation(
     const message =
       err instanceof Error ? err.message : 'Unknown Meta API error';
     console.error('[send-message] Meta send failed for all variants:', message);
-    throw new SendMessageError('meta_error', `Meta API error: ${message}`, 502);
+    // Not 502: Cloudflare (in front of Coolify) swaps any origin 502
+    // body for its own "error code: 502" page, so the inbox only ever
+    // showed "HTTP 502" and the real Meta/Kapso reason was lost. A
+    // rejected send (24h window, bad params, policy) is 422; an
+    // upstream outage is 503.
+    // Duck-typed (MetaApiError.httpStatus) so mocked meta-api modules
+    // in tests don't need to export the class.
+    const upstreamStatus =
+      err && typeof (err as { httpStatus?: unknown }).httpStatus === 'number'
+        ? (err as { httpStatus: number }).httpStatus
+        : undefined;
+    const status =
+      upstreamStatus !== undefined && upstreamStatus >= 500 ? 503 : 422;
+    throw new SendMessageError('meta_error', `Meta API error: ${message}`, status);
   }
 
   if (hasValidPhone && workingPhone !== sanitizedPhone) {

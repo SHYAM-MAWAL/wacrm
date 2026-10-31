@@ -37,7 +37,12 @@ export interface MetaPhoneHealth {
 }
 
 interface MetaErrorResponse {
-  error?: {
+  /**
+   * Graph returns an object here. The Kapso proxy returns a plain
+   * string plus a top-level `next_steps` hint (e.g. the 24-hour window
+   * rejection), so both shapes have to be read.
+   */
+  error?: string | {
     message?: string
     code?: number
     error_subcode?: number
@@ -46,6 +51,7 @@ interface MetaErrorResponse {
     /** WhatsApp-specific envelope — `details` is the human-readable part. */
     error_data?: { messaging_product?: string; details?: string }
   }
+  next_steps?: string
 }
 
 /**
@@ -95,11 +101,16 @@ export class MetaApiError extends Error {
  */
 async function readMetaError(response: Response, fallback: string): Promise<MetaApiError> {
   let message = fallback
-  let envelope: MetaErrorResponse['error'] | undefined
+  let envelope: Exclude<MetaErrorResponse['error'], string> | undefined
   try {
     const data = (await response.json()) as MetaErrorResponse
-    envelope = data.error
-    if (envelope?.message) message = envelope.message
+    if (typeof data.error === 'string') {
+      // Kapso proxy shape: { error: "...", next_steps?: "..." }
+      message = data.next_steps ? `${data.error} ${data.next_steps}` : data.error
+    } else {
+      envelope = data.error
+      if (envelope?.message) message = envelope.message
+    }
   } catch {
     // response body wasn't JSON — keep the fallback
   }

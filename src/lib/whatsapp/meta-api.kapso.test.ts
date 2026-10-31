@@ -53,6 +53,38 @@ describe('sendTextMessage transport', () => {
   });
 });
 
+describe('Kapso error envelope', () => {
+  it('surfaces the Kapso string error and next_steps instead of a bare status', async () => {
+    vi.stubEnv('META_API_BASE', KAPSO_BASE);
+    vi.stubEnv('KAPSO_API_KEY', 'kapso-secret');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            error: 'Cannot send non-template messages outside the 24-hour window.',
+            next_steps: 'Send a WhatsApp template message to reopen the session.',
+          }),
+          { status: 422 }
+        )
+      )
+    );
+
+    await expect(
+      sendTextMessage({
+        phoneNumberId: '1263059290228778',
+        accessToken: 'stored',
+        to: '15551234567',
+        text: 'hi',
+      })
+    ).rejects.toMatchObject({
+      message:
+        'Cannot send non-template messages outside the 24-hour window. Send a WhatsApp template message to reopen the session.',
+      httpStatus: 422,
+    });
+  });
+});
+
 describe('uploadResumableMedia transport', () => {
   it('does not put the Kapso key in the upload URL', async () => {
     vi.stubEnv('META_API_BASE', KAPSO_BASE);
